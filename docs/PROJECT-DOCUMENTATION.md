@@ -95,8 +95,8 @@ amount, payment_method (input)
    │
    ▼
 PaymentValidator.validate(amount, payment_method)
-   │  ├── amount <= 0            ──▶ raises ValueError("Amount must be greater than zero")
-   │  └── not a PaymentMethod    ──▶ raises ValueError("Invalid payment method")
+   ├── amount <= 0            ──▶ raises ValueError("Amount must be greater than zero")
+   └── not a PaymentMethod    ──▶ raises ValueError("Invalid payment method")
    ▼
 PaymentProcessor.calculate_fee(amount, payment_method)
    │   rate = FEE_RATES[payment_method]   (UPI=0.01, CARD=0.02, BANK_TRANSFER=0.005)
@@ -129,4 +129,88 @@ No configuration files, environment variables, or settings are evidenced in the 
 
 ## 9. Dependencies
 
-`payment.py` now imports `Enum` from the Python standard library (`enum` module) to define `PaymentMethod`. No third-party libraries, frameworks,
+`payment.py` now imports `Enum` from the Python standard library (`enum` module) to define `PaymentMethod`. No third-party libraries, frameworks, or external services are used or evidenced.
+
+## 10. Usage
+
+The script is intended to be run directly (e.g., `python payment.py`). On execution it:
+
+1. Instantiates a `PaymentProcessor`.
+2. Calls `processor.process(60000, PaymentMethod.UPI)`.
+3. Prints the resulting dictionary (containing `status`, `message`, `payment_method`, `amount`, `fee`, `total_amount`) to standard output.
+
+To process a different payment, callers should import `PaymentMethod` and `PaymentProcessor`, then call:
+
+```python
+processor = PaymentProcessor()
+result = processor.process(amount, PaymentMethod.CARD)  # or .UPI / .BANK_TRANSFER
+```
+
+Callers must be prepared to catch `ValueError` for invalid amounts or invalid payment methods, since `process` does not handle these internally.
+
+## 11. Architecture Diagram
+
+```mermaid
+flowchart TD
+    A[Script entry point] --> B[PaymentProcessor.process(amount, payment_method)]
+    B --> C[PaymentValidator.validate(amount, payment_method)]
+    C -->|amount <= 0| D[raise ValueError: Amount must be greater than zero]
+    C -->|not a PaymentMethod| E[raise ValueError: Invalid payment method]
+    C -->|valid| F[PaymentProcessor.calculate_fee(amount, payment_method)]
+    F --> G[Lookup rate in FEE_RATES by payment_method]
+    G --> H[fee = round(amount * rate, 2)]
+    H --> I[total_amount = amount + fee]
+    I --> J{amount > 1,000,000?}
+    J -->|Yes| K[status = pending, message = Manager approval required]
+    J -->|No| L[status = approved, message = Payment processed successfully]
+    K --> M[Return result dict: status, message, payment_method, amount, fee, total_amount]
+    L --> M
+    M --> N[print(result)]
+```
+
+## 12. Change Summary
+
+### What Changed
+
+- Introduced a `PaymentMethod` `Enum` with members `UPI`, `CARD`, and `BANK_TRANSFER`.
+- `PaymentValidator.validate` now accepts and validates a `payment_method` argument in addition to `amount`, raising `ValueError("Invalid payment method")` if it is not a `PaymentMethod` instance.
+- `PaymentProcessor` gained a `FEE_RATES` class attribute mapping each `PaymentMethod` to a distinct fee rate (`UPI`: `0.01`, `CARD`: `0.02`, `BANK_TRANSFER`: `0.005`), replacing the previous flat `0.02` (2%) fee applied to all payments.
+- Added `PaymentProcessor.calculate_fee(amount, payment_method)`, which looks up the applicable rate and returns `round(amount * rate, 2)`.
+- `PaymentProcessor.process` now requires a `payment_method` argument, delegates fee calculation to `calculate_fee`, and refactors the approval-threshold branching into local `status`/`message` variables before constructing a single return statement (removing the previous early-return duplicate dictionary construction).
+- The returned result dictionary now includes a `payment_method` key (the enum member's string `.value`) in both the "pending" and "approved" outcomes.
+- The approval threshold literal changed from `1000000` to the equivalent `1_000_000` (numeric underscore formatting only; value unchanged).
+- The script-level example call changed from `processor.process(50000)` to `processor.process(60000, PaymentMethod.UPI)`.
+- A trailing newline was added after the final `print(result)` statement.
+
+### Why It Changed
+
+Not evidenced in supplied context. (PR description was not provided; changes are inferred solely from the code diff to support multiple payment methods with differentiated processing fees.)
+
+### Impacted Modules
+
+- `payment.py`
+  - `PaymentMethod` (new `Enum`)
+  - `PaymentValidator` (`validate` method signature and logic changed)
+  - `PaymentProcessor` (`FEE_RATES` class attribute added, `calculate_fee` method added, `process` method signature and logic changed)
+  - Script-level execution block (updated example call)
+
+### API / Interface Changes
+
+- `PaymentValidator.validate(amount)` → `PaymentValidator.validate(amount, payment_method)`. Callers must now pass a `PaymentMethod` enum member; omitting it or passing an invalid type raises `ValueError("Invalid payment method")`.
+- `PaymentProcessor.process(amount)` → `PaymentProcessor.process(amount, payment_method)`. This is a breaking signature change — the `payment_method` parameter is required.
+- New method: `PaymentProcessor.calculate_fee(self, amount, payment_method)`.
+- Return value of `PaymentProcessor.process` gained a new key: `payment_method` (string), present in both `"approved"` and `"pending"` outcomes.
+
+### Configuration Changes
+
+None evidenced. The new fee rates and payment methods remain hard-coded in `PaymentProcessor.FEE_RATES` and the `PaymentMethod` enum, not externalized as configuration.
+
+### Expected Behavior
+
+- Observed from code: Calling `process` without a `payment_method` argument will now raise a `TypeError` (missing required positional argument), since the parameter has no default. Calling `process(amount, payment_method)` with a valid `PaymentMethod` member computes a fee based on that method's specific rate rather than a flat 2%, and returns a result dictionary that additionally reports the payment method used.
+- Observed from code: The approval threshold logic (`amount > 1,000,000` triggers `"pending"`) is unchanged in effect, only refactored in implementation.
+- Inferred: This change is intended to support differentiated fee pricing across payment channels (e.g., cheaper bank transfers vs. more expensive card payments).
+
+### Backward Compatibility
+
+- **Breaking change**: Any existing caller invoking `PaymentProcessor.process(amount)` or
