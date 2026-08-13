@@ -72,7 +72,7 @@ The core business logic is implemented in `testpayment.py`:
 amount (input)
    │
    ▼
-PaymentValidator.validate(amount)  ──→ raises ValueError if amount <= 0
+PaymentValidator.validate(amount)  ──── raises ValueError if amount <= 0
    │
    ▼
 fee = amount * 0.022
@@ -190,12 +190,11 @@ None evidenced. The fee rate remains a hard-coded literal within `PaymentProcess
 ### 12.7 Backward Compatibility
 
 - This is a breaking change to the computed `fee` and `total_amount` values for any given `amount`, since the fee rate decreased slightly from 2.22% to 2.2%. Any code, tests, or documentation relying on the previous fee rate (`0.0222`) will produce incorrect expectations.
-- No changes to method signatures, return value structure, validation rules, or approval threshold logic.
-- No migration steps are required, as this is a literal value change within a single function.
+- No changes to method signatures, return value structure, validation rules, or approval-threshold behavior. Callers integrating solely on the shape of the returned dictionary and the status values (`"approved"`, `"pending"`) are unaffected; only numeric fee/total outputs differ.
 
 ### 12.8 Testing Requirements
 
-- Add/update unit tests for `PaymentProcessor.process` to assert `fee == amount * 0.022` and `total_amount == amount + fee` for representative amounts (e.g., `50000`).
-- Verify existing tests (if any) that assert fee/total values based on the old `0.0222` rate are updated to reflect `0.022`.
-- Regression test the approval threshold behavior (`amount > 1000000` → `pending`; otherwise → `approved`) to confirm it remains unaffected by the rate change.
-- Regression test the validation rule (`amount <= 0` raises `ValueError`) to confirm it remains unaffected.
+- Update/add unit tests asserting `fee == amount * 0.022` and `total_amount == amount + fee` for representative amounts (e.g., `50000`, values near and above `1000000`, and values `<= 0`).
+- Verify existing tests (if any) that hard-code expected fee/total values based on the old `0.0222` rate are updated to reflect `0.022`.
+- Confirm `ValueError` is still raised for `amount <= 0` with the unchanged message.
+- Confirm `"pending"` status and `"Manager approval required"` message are still returned for `amount > 1000000`, and `"approved"` status otherwise, unaffected by the fee rate change.
