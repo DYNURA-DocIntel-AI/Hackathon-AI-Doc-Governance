@@ -56,7 +56,7 @@ class PaymentProcessor:
 processor = PaymentProcessor()
 
 result = processor.process(
-    50000,
+    60000,
     PaymentMethod.UPI
 )
 
