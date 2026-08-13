@@ -32,7 +32,7 @@ No API documentation applies.
 The core business logic is implemented in `testpayment.py`:
 
 - **Validation rule**: A payment `amount` must be strictly greater than zero. If `amount <= 0`, a `ValueError` is raised with the message `"Amount must be greater than zero"`.
-- **Fee calculation**: A processing fee is computed as `amount * 0.0222` (i.e., 2.22% of the amount).
+- **Fee calculation**: A processing fee is computed as `amount * 0.022` (i.e., 2.2% of the amount). This is explicitly commented in the code as "New functionality: calculate processing fee."
 - **Total amount**: `total_amount = amount + fee`.
 - **Approval threshold rule**: If `amount > 1000000`, the payment is not immediately approved — the result status is `"pending"` with the message `"Manager approval required"`.
 - **Default approval**: If the amount is within the valid range and does not exceed the threshold, the result status is `"approved"`.
@@ -41,7 +41,7 @@ The core business logic is implemented in `testpayment.py`:
 
 1. `PaymentProcessor.process(amount)` is called with a numeric amount.
 2. `PaymentValidator.validate(amount)` checks that `amount > 0`; raises `ValueError` otherwise.
-3. Fee and total amount are computed.
+3. Fee and total amount are computed using the fee rate `0.022`.
 4. If `amount > 1000000`, return a `pending` result requiring manager approval.
 5. Otherwise, return an `approved` result.
 
@@ -55,7 +55,7 @@ The core business logic is implemented in `testpayment.py`:
 - **Type**: Class encapsulating payment processing.
 - **Method**: `process(self, amount)`:
   - Validates the amount via `PaymentValidator.validate`.
-  - Calculates `fee` and `total_amount`.
+  - Calculates `fee` (as `amount * 0.022`) and `total_amount`.
   - Returns a dictionary describing the outcome (`status`, `amount`, `fee`, `total_amount`, and optionally `message`).
 
 ### Script-level execution
@@ -75,7 +75,7 @@ amount (input)
 PaymentValidator.validate(amount)  ──▶ raises ValueError if amount <= 0
    │
    ▼
-fee = amount * 0.0222
+fee = amount * 0.022
 total_amount = amount + fee
    │
    ▼
@@ -90,7 +90,7 @@ Data flows entirely in-memory within a single process execution; there is no ext
 
 No configuration files, environment variables, or settings are evidenced in the supplied code.
 
-- The fee rate (`0.0222`) and approval threshold (`1000000`) are hard-coded literals within `PaymentProcessor.process`, not externalized as configuration.
+- The fee rate (`0.022`) and approval threshold (`1000000`) are hard-coded literals within `PaymentProcessor.process`, not externalized as configuration.
 
 ## 8. Error Handling
 
@@ -117,7 +117,8 @@ class PaymentProcessor:
     def process(self, amount):
         PaymentValidator.validate(amount)
 
-        fee = amount * 0.0222
+        # New functionality: calculate processing fee
+        fee = amount * 0.022
         total_amount = amount + fee
 
         if amount > 1000000:
@@ -138,7 +139,9 @@ class PaymentProcessor:
 
 
 processor = PaymentProcessor()
+
 result = processor.process(50000)
+
 print(result)
 ```
 
@@ -150,7 +153,7 @@ Running this script (`python testpayment.py`) prints a dictionary describing an 
 flowchart TD
     A[Caller invokes PaymentProcessor.process(amount)] --> B[PaymentValidator.validate(amount)]
     B -->|amount <= 0| C[Raise ValueError]
-    B -->|amount > 0| D[Calculate fee = amount * 0.0222]
+    B -->|amount > 0| D[Calculate fee = amount * 0.022]
     D --> E[Calculate total_amount = amount + fee]
     E --> F{amount > 1,000,000?}
     F -->|Yes| G[Return status=pending, Manager approval required]
@@ -166,7 +169,7 @@ flowchart TD
   - `PaymentValidator` class with a static `validate(amount)` method that raises `ValueError` for non-positive amounts.
   - `PaymentProcessor` class with a `process(amount)` method that:
     - Validates the amount.
-    - Calculates a processing fee (`amount * 0.0222`).
+    - Calculates a processing fee as `amount * 0.022` (2.2%), explicitly marked in code as "New functionality: calculate processing fee."
     - Calculates `total_amount` (`amount + fee`).
     - Returns `"pending"` status requiring manager approval for amounts greater than 1,000,000.
     - Returns `"approved"` status otherwise.
@@ -191,7 +194,7 @@ None evidenced.
 
 ### 12.6 Expected Behavior
 
-- **Observed from code**: Running `testpayment.py` will validate that `amount > 0`, compute `fee = amount * 0.0222` and `total_amount = amount + fee`, and return/print a dictionary with status `"approved"` for amounts ≤ 1,000,000, or `"pending"` (with a manager-approval message) for amounts > 1,000,000. Invalid amounts (`<= 0`) raise an uncaught `ValueError`.
+- **Observed from code**: Running `testpayment.py` will validate that `amount > 0`, compute `fee = amount * 0.022` and `total_amount = amount + fee`, and return/print a dictionary with status `"approved"` for amounts ≤ 1,000,000, or `"pending"` (with a manager-approval message) for amounts > 1,000,000. Invalid amounts (`<= 0`) raise an uncaught `ValueError`.
 - **Inferred**: This module may be intended as a prototype or test utility for payment processing logic, possibly to be integrated into a larger system later. This is not confirmed by the supplied context.
 
 ### 12.7 Backward Compatibility
@@ -206,7 +209,7 @@ Based on the evidenced logic in `testpayment.py`, the following tests are recomm
   - Verify `PaymentValidator.validate(amount)` raises `ValueError` for `amount == 0` and negative amounts.
   - Verify `PaymentValidator.validate(amount)` does not raise for positive amounts.
 - **Fee and total calculation**:
-  - Verify `fee` is correctly computed as `amount * 0.0222` for representative amounts.
+  - Verify `fee` is correctly computed as `amount * 0.022` for representative amounts.
   - Verify `total_amount` equals `amount + fee`.
 - **Threshold/status logic**:
   - Verify amounts ≤ 1,000,000 return `status: "approved"`.
@@ -218,3 +221,4 @@ Based on the evidenced logic in `testpayment.py`, the following tests are recomm
   - Non-numeric input (e.g., strings) — behavior is currently undefined/untested in the supplied code; consider adding type-checking tests or explicit handling.
   - Very large amounts (beyond typical use) to ensure fee/total calculations do not overflow or behave unexpectedly.
 - **Regression risk**: Since `test.txt` has no functional code, no regression tests are needed for it; confirm it is not mistakenly referenced by any build/test tooling.
+- **Fee rate regression check**: Since the fee multiplier value (`0.022`) differs from a previously documented rate (`0.0222`), add a test asserting the exact fee rate used in `PaymentProcessor.process` to detect unintended future changes to this business rule.
