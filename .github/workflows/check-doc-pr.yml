@@ -3,55 +3,103 @@ name: Check Documentation PR Merged
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches:
-      - main
+
+permissions:
+  pull-requests: read
+  contents: read
+  actions: write
 
 jobs:
   check-doc-pr:
+    if: github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Check PR body for documentation link
-        id: check
+      - name: Require linked docs PR to be merged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          PR_BODY="${{ github.event.pull_request.body }}"
-          
-          # Check if PR body contains a linked issue/PR
-          if echo "$PR_BODY" | grep -iE "(closes|relates to|documentation|#[0-9]+)" > /dev/null; then
-            echo "✅ Found documentation reference in PR body"
-            echo "status=found" >> $GITHUB_OUTPUT
-          else
-            echo "❌ No documentation PR referenced"
-            echo "status=not_found" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-      
-      - name: Skip check for documentation PRs
-        id: is_doc_pr
-        run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          
-          if echo "$PR_TITLE" | grep -iE "(^docs|^documentation|^doc:)" > /dev/null; then
-            echo "This is a documentation PR - skipping check"
-            echo "is_doc=true" >> $GITHUB_OUTPUT
+          set -euo pipefail
+
+          if [[ "$HEAD_REF" == docs/pr-* ]] || [[ "$PR_TITLE" =~ ^docs: ]]; then
+            echo "This is a documentation PR; skipping."
             exit 0
           fi
-          
-          echo "is_doc=false" >> $GITHUB_OUTPUT
-      
-      - name: Documentation check result
-        run: |
-          IS_DOC=${{ steps.is_doc_pr.outputs.is_doc }}
-          STATUS=${{ steps.check.outputs.status }}
-          
-          if [ "$IS_DOC" = "true" ]; then
-            echo "✅ This PR is a documentation PR - auto-passing"
-          elif [ "$STATUS" = "found" ]; then
-            echo "✅ Documentation reference found - PR can merge once doc is merged"
-          else
-            echo "❌ No documentation reference found"
+
+          ATTEMPTS=24
+          SLEEP_SECONDS=15
+          DOCS_PR=""
+
+          echo "Waiting up to $((ATTEMPTS * SLEEP_SECONDS))s for DocIntelAI to open docs/pr-${PR_NUMBER}..."
+
+          i=1
+          while [ "$i" -le "$ATTEMPTS" ]; do
+            DOCS_PR=$(gh pr list --repo "$GITHUB_REPOSITORY" \
+              --head "docs/pr-${PR_NUMBER}" \
+              --state all \
+              --json number,state,mergedAt,headRefName \
+              --jq '.[0] // empty')
+
+            if [ -n "$DOCS_PR" ]; then
+              echo "Found docs PR on attempt ${i}."
+              break
+            fi
+
+            echo "Docs PR not ready yet (attempt ${i}/${ATTEMPTS}). Waiting ${SLEEP_SECONDS}s..."
+            sleep "$SLEEP_SECONDS"
+            i=$((i + 1))
+          done
+
+          if [ -z "$DOCS_PR" ]; then
+            echo "Timed out waiting for branch docs/pr-${PR_NUMBER}."
+            echo "Re-run this job after the docs PR is opened, or merge the docs PR and this check will run again."
             exit 1
           fi
+
+          MERGED_AT=$(echo "$DOCS_PR" | jq -r '.mergedAt // empty')
+          DOCS_NUM=$(echo "$DOCS_PR" | jq -r '.number')
+          STATE=$(echo "$DOCS_PR" | jq -r '.state')
+
+          echo "Docs PR #${DOCS_NUM} state=${STATE} mergedAt=${MERGED_AT:-none}"
+
+          if [ -n "$MERGED_AT" ]; then
+            echo "Docs PR #${DOCS_NUM} is merged. Code PR can be merged."
+            exit 0
+          fi
+
+          echo "Docs PR #${DOCS_NUM} is not merged yet. Merge stays blocked."
+          exit 1
+
+  rerun-after-docs-pr-opened:
+    if: startsWith(github.event.pull_request.head.ref, 'docs/pr-') && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-run code PR check now that docs PR exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          CODE_PR="${HEAD_REF#docs/pr-}"
+          echo "Docs PR opened for code PR #${CODE_PR}. Looking up failed check-doc-pr runs to rerun..."
+
+          RUN_IDS=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow "check-doc-pr.yml" \
+            --event pull_request \
+            --json databaseId,headBranch,conclusion,status \
+            --limit 50 \
+            --jq "[.[] | select(.conclusion == \"failure\" or .conclusion == \"cancelled\")] | .[].databaseId")
+
+          if [ -z "$RUN_IDS" ]; then
+            echo "No failed runs to rerun (the code PR job may still be polling)."
+            exit 0
+          fi
+
+          echo "$RUN_IDS" | while read -r RUN_ID; do
+            [ -z "$RUN_ID" ] && continue
+            echo "Rerunning workflow run ${RUN_ID}"
+            gh run rerun "$RUN_ID" --repo "$GITHUB_REPOSITORY" || true
+          done
