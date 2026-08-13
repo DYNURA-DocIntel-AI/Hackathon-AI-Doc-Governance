@@ -3,55 +3,48 @@ name: Check Documentation PR Merged
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  pull-requests: read
+  contents: read
 
 jobs:
   check-doc-pr:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4.2.0
-      
-      - name: Check PR body for documentation link
-        id: check
+      - name: Require linked docs PR to be merged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          PR_BODY="${{ github.event.pull_request.body }}"
-          
-          # Check if PR body contains a linked issue/PR
-          if echo "$PR_BODY" | grep -iE "(closes|relates to|documentation|#[0-9]+)" > /dev/null; then
-            echo "✅ Found documentation reference in PR body"
-            echo "status=found" >> $GITHUB_OUTPUT
-          else
-            echo "❌ No documentation PR referenced"
-            echo "status=not_found" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-      
-      - name: Skip check for documentation PRs
-        id: is_doc_pr
-        run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          
-          if echo "$PR_TITLE" | grep -iE "(^docs|^documentation|^doc:)" > /dev/null; then
-            echo "This is a documentation PR - skipping check"
-            echo "is_doc=true" >> $GITHUB_OUTPUT
+          set -euo pipefail
+
+          # Docs PRs themselves must stay mergeable (they target the feature branch).
+          if [[ "$HEAD_REF" == docs/pr-* ]] || [[ "$PR_TITLE" =~ ^docs: ]]; then
+            echo "This is a documentation PR; skipping."
             exit 0
           fi
-          
-          echo "is_doc=false" >> $GITHUB_OUTPUT
-      
-      - name: Documentation check result
-        run: |
-          IS_DOC=${{ steps.is_doc_pr.outputs.is_doc }}
-          STATUS=${{ steps.check.outputs.status }}
-          
-          if [ "$IS_DOC" = "true" ]; then
-            echo "✅ This PR is a documentation PR - auto-passing"
-          elif [ "$STATUS" = "found" ]; then
-            echo "✅ Documentation reference found - PR can merge once doc is merged"
-          else
-            echo "❌ No documentation reference found"
+
+          DOCS_PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --state all \
+            --json number,title,state,mergedAt,headRefName \
+            --jq "[.[] | select(.headRefName == \"docs/pr-${PR_NUMBER}\")] | .[0]")
+
+          if [[ -z "$DOCS_PR" || "$DOCS_PR" == "null" ]]; then
+            echo "No docs PR found (expected branch docs/pr-${PR_NUMBER}). Merge is blocked until DocIntelAI opens it."
             exit 1
           fi
+
+          MERGED_AT=$(echo "$DOCS_PR" | jq -r '.mergedAt // empty')
+          DOCS_NUM=$(echo "$DOCS_PR" | jq -r '.number')
+          STATE=$(echo "$DOCS_PR" | jq -r '.state')
+
+          if [[ -n "$MERGED_AT" ]]; then
+            echo "Docs PR #${DOCS_NUM} is merged (${MERGED_AT}). Code PR can be merged."
+            exit 0
+          fi
+
+          echo "Docs PR #${DOCS_NUM} exists but is not merged (state=${STATE}). Merge stays blocked."
+          exit 1
