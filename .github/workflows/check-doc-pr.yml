@@ -3,15 +3,17 @@ name: Check Documentation PR Merged
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main]
 
 permissions:
   pull-requests: read
   contents: read
+  actions: write
 
 jobs:
   check-doc-pr:
+    if: github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require linked docs PR to be merged
         env:
@@ -22,18 +24,38 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Docs PRs themselves must stay mergeable (they target the feature branch).
           if [[ "$HEAD_REF" == docs/pr-* ]] || [[ "$PR_TITLE" =~ ^docs: ]]; then
             echo "This is a documentation PR; skipping."
             exit 0
           fi
 
-          DOCS_PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --state all \
-            --json number,title,state,mergedAt,headRefName \
-            --jq "[.[] | select(.headRefName == \"docs/pr-${PR_NUMBER}\")] | .[0]")
+          ATTEMPTS=24
+          SLEEP_SECONDS=15
+          DOCS_PR=""
 
-          if [[ -z "$DOCS_PR" || "$DOCS_PR" == "null" ]]; then
-            echo "No docs PR found (expected branch docs/pr-${PR_NUMBER}). Merge is blocked until DocIntelAI opens it."
+          echo "Waiting up to $((ATTEMPTS * SLEEP_SECONDS))s for DocIntelAI to open docs/pr-${PR_NUMBER}..."
+
+          i=1
+          while [ "$i" -le "$ATTEMPTS" ]; do
+            DOCS_PR=$(gh pr list --repo "$GITHUB_REPOSITORY" \
+              --head "docs/pr-${PR_NUMBER}" \
+              --state all \
+              --json number,state,mergedAt,headRefName \
+              --jq '.[0] // empty')
+
+            if [ -n "$DOCS_PR" ]; then
+              echo "Found docs PR on attempt ${i}."
+              break
+            fi
+
+            echo "Docs PR not ready yet (attempt ${i}/${ATTEMPTS}). Waiting ${SLEEP_SECONDS}s..."
+            sleep "$SLEEP_SECONDS"
+            i=$((i + 1))
+          done
+
+          if [ -z "$DOCS_PR" ]; then
+            echo "Timed out waiting for branch docs/pr-${PR_NUMBER}."
+            echo "Re-run this job after the docs PR is opened, or merge the docs PR and this check will run again."
             exit 1
           fi
 
@@ -41,10 +63,43 @@ jobs:
           DOCS_NUM=$(echo "$DOCS_PR" | jq -r '.number')
           STATE=$(echo "$DOCS_PR" | jq -r '.state')
 
-          if [[ -n "$MERGED_AT" ]]; then
-            echo "Docs PR #${DOCS_NUM} is merged (${MERGED_AT}). Code PR can be merged."
+          echo "Docs PR #${DOCS_NUM} state=${STATE} mergedAt=${MERGED_AT:-none}"
+
+          if [ -n "$MERGED_AT" ]; then
+            echo "Docs PR #${DOCS_NUM} is merged. Code PR can be merged."
             exit 0
           fi
 
-          echo "Docs PR #${DOCS_NUM} exists but is not merged (state=${STATE}). Merge stays blocked."
+          echo "Docs PR #${DOCS_NUM} is not merged yet. Merge stays blocked."
           exit 1
+
+  rerun-after-docs-pr-opened:
+    if: startsWith(github.event.pull_request.head.ref, 'docs/pr-') && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-run code PR check now that docs PR exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          CODE_PR="${HEAD_REF#docs/pr-}"
+          echo "Docs PR opened for code PR #${CODE_PR}. Looking up failed check-doc-pr runs to rerun..."
+
+          RUN_IDS=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow "check-doc-pr.yml" \
+            --event pull_request \
+            --json databaseId,headBranch,conclusion,status \
+            --limit 50 \
+            --jq "[.[] | select(.conclusion == \"failure\" or .conclusion == \"cancelled\")] | .[].databaseId")
+
+          if [ -z "$RUN_IDS" ]; then
+            echo "No failed runs to rerun (the code PR job may still be polling)."
+            exit 0
+          fi
+
+          echo "$RUN_IDS" | while read -r RUN_ID; do
+            [ -z "$RUN_ID" ] && continue
+            echo "Rerunning workflow run ${RUN_ID}"
+            gh run rerun "$RUN_ID" --repo "$GITHUB_REPOSITORY" || true
+          done
