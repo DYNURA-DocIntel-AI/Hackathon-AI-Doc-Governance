@@ -72,7 +72,7 @@ The core business logic is implemented in `testpayment.py`:
 amount (input)
    │
    ▼
-PaymentValidator.validate(amount)  ──▶ raises ValueError if amount <= 0
+PaymentValidator.validate(amount)  ──→ raises ValueError if amount <= 0
    │
    ▼
 fee = amount * 0.02
@@ -80,8 +80,8 @@ total_amount = amount + fee
    │
    ▼
 amount > 1,000,000 ?
-   ├── Yes ──▶ {status: "pending", message: "Manager approval required", amount, fee, total_amount}
-   └── No  ──▶ {status: "approved", amount, fee, total_amount}
+   ├── Yes ──→ {status: "pending", message: "Manager approval required", amount, fee, total_amount}
+   └── No  ──→ {status: "approved", amount, fee, total_amount}
 ```
 
 Data flows entirely in-memory within a single process execution; there is no external I/O, persistence, or network transmission evidenced.
