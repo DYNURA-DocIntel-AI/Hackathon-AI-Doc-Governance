@@ -12,7 +12,7 @@ class PaymentProcessor:
         return amount * 0.02
 
     def process(self):
-        amount = 50000
+        amount = 30000
         PaymentValidator.validate(amount)
 
         fee = self.calculate_fee(amount)
