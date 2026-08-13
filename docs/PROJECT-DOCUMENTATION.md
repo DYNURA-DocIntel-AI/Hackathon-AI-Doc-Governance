@@ -43,7 +43,7 @@ The core business logic is implemented in `payment.py`:
 
   The fee is computed as `round(amount * rate, 2)`, where `rate` is looked up from `FEE_RATES` using the given `payment_method`.
 - **Total amount**: `total_amount = amount + fee`.
-- **Approval threshold rule**: If `amount > 1,000,000`, the payment is not immediately approved — the result status is `"pending"` with the message `"Manager approval required"`.
+- **Approval threshold rule**: If `amount > 1000000`, the payment is not immediately approved — the result status is `"pending"` with the message `"Manager approval required"`. (The threshold value itself remains `1,000,000`; only its literal representation in code changed from `1_000_000` to `1000000`, a formatting change with no effect on behavior.)
 - **Default approval**: If the amount is within the valid range and does not exceed the threshold, the result status is `"approved"` with the message `"Payment processed successfully"`.
 - **Result payload**: Regardless of status, the result now includes the resolved `payment_method` (as its string `.value`), in addition to `status`, `message`, `amount`, `fee`, and `total_amount`.
 
@@ -55,7 +55,7 @@ The core business logic is implemented in `payment.py`:
    - `payment_method` is a `PaymentMethod` instance; raises `ValueError("Invalid payment method")` otherwise.
 3. `PaymentProcessor.calculate_fee(amount, payment_method)` looks up the fee rate for the given payment method from `FEE_RATES` and computes `fee = round(amount * rate, 2)`.
 4. `total_amount = amount + fee` is computed.
-5. If `amount > 1,000,000`, `status = "pending"` and `message = "Manager approval required"`.
+5. If `amount > 1000000`, `status = "pending"` and `message = "Manager approval required"`.
 6. Otherwise, `status = "approved"` and `message = "Payment processed successfully"`.
 7. A result dictionary is returned containing `status`, `message`, `payment_method` (string value), `amount`, `fee`, and `total_amount`.
 
@@ -77,12 +77,12 @@ The core business logic is implemented in `payment.py`:
 - **Method**: `process(self, amount, payment_method)`:
   - Validates the amount and payment method via `PaymentValidator.validate`.
   - Calculates `fee` via `calculate_fee` and computes `total_amount`.
-  - Determines `status` and `message` based on the approval threshold (`amount > 1,000,000`).
+  - Determines `status` and `message` based on the approval threshold (`amount > 1000000`).
   - Returns a dictionary describing the outcome (`status`, `message`, `payment_method` (string value), `amount`, `fee`, `total_amount`).
 
 ### Script-level execution
 - Instantiates `processor = PaymentProcessor()`.
-- Calls `processor.process(60000, PaymentMethod.UPI)`.
+- Calls `processor.process(30000, PaymentMethod.UPI)`. (Previously `60000`; the example invocation amount was changed but the underlying processing logic and outcome — `"approved"` status, since the amount remains well below the 1,000,000 threshold — are unaffected.)
 - Prints the resulting dictionary to standard output.
 
 ### `test.txt`
@@ -95,8 +95,8 @@ amount, payment_method (input)
    │
    ▼
 PaymentValidator.validate(amount, payment_method)
-   │  ├── amount <= 0            ──▶ raises ValueError("Amount must be greater than zero")
-   │  └── not a PaymentMethod    ──▶ raises ValueError("Invalid payment method")
+   ├── amount <= 0            ──▶ raises ValueError("Amount must be greater than zero")
+   └── not a PaymentMethod    ──▶ raises ValueError("Invalid payment method")
    ▼
 PaymentProcessor.calculate_fee(amount, payment_method)
    │   rate = FEE_RATES[payment_method]   (UPI=0.01, CARD=0.02, BANK_TRANSFER=0.005)
@@ -105,7 +105,7 @@ PaymentProcessor.calculate_fee(amount, payment_method)
 total_amount = amount + fee
    │
    ▼
-amount > 1,000,000 ?
+amount > 1000000 ?
    ├── Yes ──▶ {status: "pending",  message: "Manager approval required",       payment_method, amount, fee, total_amount}
    └── No  ──▶ {status: "approved", message: "Payment processed successfully",  payment_method, amount, fee, total_amount}
 ```
@@ -117,7 +117,7 @@ Data flows entirely in-memory within a single process execution; there is no ext
 No configuration files, environment variables, or settings are evidenced in the supplied code.
 
 - The per-method fee rates (`UPI`: `0.01`, `CARD`: `0.02`, `BANK_TRANSFER`: `0.005`) are hard-coded as a class-level dictionary (`PaymentProcessor.FEE_RATES`), not externalized as configuration.
-- The approval threshold (`1,000,000`) is a hard-coded literal within `PaymentProcessor.process`, not externalized as configuration.
+- The approval threshold (`1000000`) is a hard-coded literal within `PaymentProcessor.process`, not externalized as configuration. Its numeric value is unchanged; only its literal formatting (previously written with an underscore digit separator, `1_000_000`) was updated.
 
 ## 8. Error Handling
 
@@ -129,4 +129,44 @@ No configuration files, environment variables, or settings are evidenced in the 
 
 ## 9. Dependencies
 
-`payment.py` now imports `Enum` from the Python standard library (`enum` module) to define `PaymentMethod`. No third-party libraries, frameworks,
+`payment.py` imports `Enum` from the Python standard library (`enum` module) to define `PaymentMethod`. No third-party libraries, frameworks, or external services are evidenced in the supplied code.
+
+## 12. Change Summary
+
+### What Changed
+
+- In `PaymentProcessor.process`, the approval threshold check was rewritten from `if amount > 1_000_000:` to `if amount > 1000000:`. This is a literal formatting change (removal of the underscore digit separator); the numeric threshold value (1,000,000) is unchanged.
+- In the script-level example invocation, `processor.process(60000, PaymentMethod.UPI)` was changed to `processor.process(30000, PaymentMethod.UPI)`, altering the sample amount used when the script is run directly.
+
+### Why It Changed
+
+Not evidenced in supplied context. The PR title is "Pyament Process Update" with no description provided.
+
+### Impacted Modules
+
+- `payment.py` — specifically `PaymentProcessor.process` (threshold literal) and the module's top-level script execution block (example invocation amount).
+
+### API / Interface Changes
+
+None evidenced. Method signatures for `PaymentValidator.validate`, `PaymentProcessor.calculate_fee`, and `PaymentProcessor.process` are unchanged.
+
+### Configuration Changes
+
+None evidenced. The approval threshold remains a hard-coded literal (value unchanged at 1,000,000); only its source-code representation changed.
+
+### Expected Behavior
+
+- **Observed from code**: The approval threshold comparison behaves identically before and after the change, since `1_000_000 == 1000000` in Python — no functional difference in when a payment is marked `"pending"` vs. `"approved"`.
+- **Observed from code**: Running the script directly now processes a payment of `30000` via `UPI` instead of `60000`. Given the fee rate for `UPI` is `1%`, this changes the printed sample output's `amount`, `fee` (from `600.0` to `300.0`), and `total_amount` (from `60600.0` to `30300.0`), but the `status` remains `"approved"` in both cases since neither amount exceeds the 1,000,000 threshold.
+- **Inferred**: This change appears to be a minor code cleanup/example-data adjustment rather than a business rule change.
+
+### Backward Compatibility
+
+No breaking changes are evidenced. The public method signatures, validation rules, fee calculation logic, and approval threshold value are all unchanged. The only differences are a code-style literal change and a sample invocation value, neither of which affects the module's external behavior or contract.
+
+### Testing Requirements
+
+- Verify `PaymentProcessor.process` still returns `status = "approved"` for amounts at and below 1,000,000, and `status = "pending"` for amounts above 1,000,000, confirming the threshold behavior is unaffected by the literal formatting change.
+- Verify boundary behavior at `amount == 1000000` (should be `"approved"`, since the condition is strictly `>`).
+- Re-run/verify the script's sample output reflects the new example amount (`30000`) with correct `fee` (`300.0`) and `total_amount` (`30300.0`) for `PaymentMethod.UPI`.
+- Confirm no regression in existing validation error paths (`amount <= 0`, invalid `payment_method`).
