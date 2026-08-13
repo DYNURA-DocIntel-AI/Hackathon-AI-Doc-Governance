@@ -9,19 +9,13 @@ class PaymentProcessor:
     def process(self, amount):
         PaymentValidator.validate(amount)
 
-        if amount > 100000:
-            return self._pending(amount)
+        if amount > 1000000:
+            return {
+                "status": "pending",
+                "message": "Manager approval required",
+                "amount": amount,
+            }
 
-        return self._approved(amount)
-
-    def _pending(self, amount):
-        return {
-            "status": "pending",
-            "message": "Manager approval required",
-            "amount": amount,
-        }
-
-    def _approved(self, amount):
         return {
             "status": "approved",
             "amount": amount,
@@ -31,4 +25,5 @@ class PaymentProcessor:
 processor = PaymentProcessor()
 
 result = processor.process(50000)
+
 print(result)
