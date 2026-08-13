@@ -6,7 +6,8 @@ class PaymentValidator:
 
 
 class PaymentProcessor:
-    def process(self, amount):
+    def process(self):
+        amount = 50000
         PaymentValidator.validate(amount)
 
         # New functionality: calculate processing fee
@@ -32,6 +33,6 @@ class PaymentProcessor:
 
 processor = PaymentProcessor()
 
-result = processor.process(50000)
+result = processor.process()
 
 print(result)
