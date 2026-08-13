@@ -10,7 +10,7 @@ class PaymentProcessor:
         PaymentValidator.validate(amount)
 
         # New functionality: calculate processing fee
-        fee = amount * 0.0222
+        fee = amount * 0.02
         total_amount = amount + fee
 
         if amount > 1000000:
