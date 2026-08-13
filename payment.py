@@ -36,7 +36,7 @@ class PaymentProcessor:
         fee = self.calculate_fee(amount, payment_method)
         total_amount = amount + fee
 
-        if amount > 1_000_000:
+        if amount > 1000000:
             status = "pending"
             message = "Manager approval required"
         else:
