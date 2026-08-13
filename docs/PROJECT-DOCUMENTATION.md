@@ -224,4 +224,4 @@ Based on the evidenced logic in `testpayment.py`, the following tests are recomm
   - Verify `PaymentProcessor.process` propagates `ValueError` when given invalid input (e.g., `0`, negative numbers).
 - **Edge cases**:
   - Non-numeric input (e.g., strings) — behavior is currently undefined/untested in the supplied code; consider adding type-checking tests or explicit handling.
-  - Very large amounts (beyond typical use) to ensure
+  - Very large amounts (beyond typical use) to ensure correct fee/total calculation without overflow or precision issues.
