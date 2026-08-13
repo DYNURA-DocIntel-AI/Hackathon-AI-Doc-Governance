@@ -9,22 +9,38 @@ class PaymentProcessor:
     def process(self, amount):
         PaymentValidator.validate(amount)
 
+        # NEW: Apply a 2% transaction fee
+        fee = amount * 0.02
+        total_amount = amount + fee
+
         if amount > 100000:
-            return self._pending(amount)
+            return self._pending(
+                amount,
+                fee,
+                total_amount,
+            )
 
-        return self._approved(amount)
+        return self._approved(
+            amount,
+            fee,
+            total_amount,
+        )
 
-    def _pending(self, amount):
+    def _pending(self, amount, fee, total_amount):
         return {
             "status": "pending",
             "message": "Manager approval required",
             "amount": amount,
+            "fee": fee,
+            "total_amount": total_amount,
         }
 
-    def _approved(self, amount):
+    def _approved(self, amount, fee, total_amount):
         return {
             "status": "approved",
             "amount": amount,
+            "fee": fee,
+            "total_amount": total_amount,
         }
 
 
