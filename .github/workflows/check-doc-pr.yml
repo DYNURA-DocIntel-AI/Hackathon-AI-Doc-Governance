@@ -3,15 +3,15 @@ name: Check Documentation PR Merged
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    branches:
+      - main
 
 permissions:
   pull-requests: read
   contents: read
-  actions: write
 
 jobs:
   check-doc-pr:
-    if: github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -55,7 +55,6 @@ jobs:
 
           if [ -z "$DOCS_PR" ]; then
             echo "Timed out waiting for branch docs/pr-${PR_NUMBER}."
-            echo "Re-run this job after the docs PR is opened, or merge the docs PR and this check will run again."
             exit 1
           fi
 
@@ -72,34 +71,3 @@ jobs:
 
           echo "Docs PR #${DOCS_NUM} is not merged yet. Merge stays blocked."
           exit 1
-
-  rerun-after-docs-pr-opened:
-    if: startsWith(github.event.pull_request.head.ref, 'docs/pr-') && github.event.action == 'opened'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Re-run code PR check now that docs PR exists
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          set -euo pipefail
-          CODE_PR="${HEAD_REF#docs/pr-}"
-          echo "Docs PR opened for code PR #${CODE_PR}. Looking up failed check-doc-pr runs to rerun..."
-
-          RUN_IDS=$(gh run list --repo "$GITHUB_REPOSITORY" \
-            --workflow "check-doc-pr.yml" \
-            --event pull_request \
-            --json databaseId,headBranch,conclusion,status \
-            --limit 50 \
-            --jq "[.[] | select(.conclusion == \"failure\" or .conclusion == \"cancelled\")] | .[].databaseId")
-
-          if [ -z "$RUN_IDS" ]; then
-            echo "No failed runs to rerun (the code PR job may still be polling)."
-            exit 0
-          fi
-
-          echo "$RUN_IDS" | while read -r RUN_ID; do
-            [ -z "$RUN_ID" ] && continue
-            echo "Rerunning workflow run ${RUN_ID}"
-            gh run rerun "$RUN_ID" --repo "$GITHUB_REPOSITORY" || true
-          done
