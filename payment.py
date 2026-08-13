@@ -34,6 +34,7 @@ class PaymentProcessor:
             "fee": fee,
             "total_amount": total_amount,
         }
+        
 
     def _approved(self, amount, fee, total_amount):
         return {
