@@ -1,0 +1,5 @@
+mkdir -p .github/workflows
+# Then paste the workflow content into .github/workflows/check-doc-pr.yml
+git add .github/workflows/check-doc-pr.yml
+git commit -m "Add documentation PR verification workflow"
+git push
