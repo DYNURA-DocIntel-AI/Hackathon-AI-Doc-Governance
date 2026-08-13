@@ -168,7 +168,7 @@ flowchart TD
 
 ### 12.2 Why It Changed
 
-Not evidenced in supplied context. The PR title is "Test pr merge" and no pull request description was provided. No comments or metadata explain the motivation for adjusting the fee rate from 2.22% to 2.2%.
+Not evidenced in supplied context. The PR title is "Test pr merge" and no pull request description was provided, and no comments or metadata explain the motivation for adjusting the fee rate from 2.22% to 2.2%.
 
 ### 12.3 Impacted Modules
 
@@ -184,31 +184,10 @@ None evidenced. The fee rate remains a hard-coded literal within `PaymentProcess
 
 ### 12.6 Expected Behavior
 
-- **Observed from code**: `PaymentProcessor.process(amount)` now computes `fee = amount * 0.022` instead of `amount * 0.0222`, and `total_amount = amount + fee` accordingly. For the sample invocation `process(50000)`, the fee is now `1100.0` and `total_amount` is `51100.0` (previously `1110.0` and `51110.0` respectively, under the prior `0.0222` rate). All validation and approval-threshold behavior (raising `ValueError` for `amount <= 0`, `"pending"` status for `amount > 1000000`, `"approved"` otherwise) is unchanged.
-- **Inferred**: The fee rate adjustment (from 2.22% to 2.2%) may reflect a minor correction or business decision to slightly reduce processing fees, though this is not confirmed by the supplied context.
+- **Observed from code**: `PaymentProcessor.process(amount)` now computes `fee = amount * 0.022` instead of `amount * 0.0222`, and `total_amount = amount + fee` accordingly. For the sample invocation `process(50000)`, the fee is now `1100.0` and `total_amount` is `51100.0` (previously `1110.0` and `51110.0` respectively, under the `0.0222` rate). All validation and approval-threshold behavior (raising `ValueError` for `amount <= 0`, `"pending"` status for `amount > 1000000`, `"approved"` otherwise) is unchanged.
+- **Inferred**: The fee rate adjustment (2.22% → 2.2%) may reflect a minor business correction to processing fee pricing, though this is not confirmed by the supplied context.
 
 ### 12.7 Backward Compatibility
 
-- This is a breaking change to the computed `fee` and `total_amount` values for any given `amount`, since the fee rate decreased from 2.22% to 2.2%. Any code, tests, or documentation relying on the previous fee rate (`0.0222`) will produce incorrect expectations.
-- No changes to method signatures, return value structure, or validation/approval logic — only the numeric fee-rate constant changed.
-- No migration steps are evidenced or required beyond updating any hard-coded expectations of the previous fee rate.
-
-### 12.8 Testing Requirements
-
-Based on the evidenced change, the following tests are recommended:
-
-- **Fee and total calculation (updated rate)**:
-  - Verify `fee` is correctly computed as `amount * 0.022` for representative amounts.
-  - Verify `total_amount` equals `amount + fee`.
-  - For `amount = 50000`, expect `fee = 1100.0` and `total_amount = 51100.0`.
-  - Update or remove any existing tests/assertions that expect the previous fee rate (`0.0222`, e.g., `fee = 1110.0` for `amount = 50000`).
-- **Validation behavior** (unchanged, retest to confirm no regression):
-  - Verify `PaymentValidator.validate(amount)` raises `ValueError` for `amount == 0` and negative amounts.
-  - Verify `PaymentValidator.validate(amount)` does not raise for positive amounts.
-- **Threshold/status logic** (unchanged, retest to confirm no regression):
-  - Verify amounts ≤ 1,000,000 return `status: "approved"`.
-  - Verify amounts > 1,000,000 return `status: "pending"` with message `"Manager approval required"`.
-  - Test boundary condition at exactly `amount == 1000000` (should be `"approved"` per `>` comparison) and `amount == 1000001` (should be `"pending"`).
-- **Error propagation** (unchanged, retest to confirm no regression):
-  - Verify `PaymentProcessor.process` propagates `ValueError` when given invalid input (e.g., `0`, negative numbers).
-- **Regression check**: Confirm no other call sites, tests, or downstream consumers depend on the previous fee rate value of `0.0222`.
+- This is a breaking change to the computed `fee` and `total_amount` values for any given `amount`, since the fee rate decreased slightly from 2.22% to 2.2%. Any code, tests, or documentation relying on the previous fee rate (`0.0222`) will produce incorrect expectations.
+- No changes to method signatures, return value struct
