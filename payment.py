@@ -32,6 +32,6 @@ class PaymentProcessor:
 
 processor = PaymentProcessor()
 
-result = processor.process(50000)
+result = processor.process(30000)
 
 print(result)
