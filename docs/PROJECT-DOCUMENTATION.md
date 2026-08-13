@@ -32,7 +32,7 @@ No API documentation applies.
 The core business logic is implemented in `testpayment.py`:
 
 - **Validation rule**: A payment `amount` must be strictly greater than zero. If `amount <= 0`, a `ValueError` is raised with the message `"Amount must be greater than zero"`.
-- **Fee calculation**: A processing fee is computed as `amount * 0.022` (i.e., 2.2% of the amount). This is explicitly commented in the code as "New functionality: calculate processing fee."
+- **Fee calculation**: A processing fee is computed as `amount * 0.022` (i.e., 2.2% of the amount). This is a change from the previously documented rate of `0.0222` (2.22%); the fee percentage has been reduced.
 - **Total amount**: `total_amount = amount + fee`.
 - **Approval threshold rule**: If `amount > 1000000`, the payment is not immediately approved — the result status is `"pending"` with the message `"Manager approval required"`.
 - **Default approval**: If the amount is within the valid range and does not exceed the threshold, the result status is `"approved"`.
@@ -55,7 +55,7 @@ The core business logic is implemented in `testpayment.py`:
 - **Type**: Class encapsulating payment processing.
 - **Method**: `process(self, amount)`:
   - Validates the amount via `PaymentValidator.validate`.
-  - Calculates `fee` (as `amount * 0.022`) and `total_amount`.
+  - Calculates `fee` (using rate `0.022`) and `total_amount`.
   - Returns a dictionary describing the outcome (`status`, `amount`, `fee`, `total_amount`, and optionally `message`).
 
 ### Script-level execution
@@ -145,7 +145,7 @@ result = processor.process(50000)
 print(result)
 ```
 
-Running this script (`python testpayment.py`) prints a dictionary describing an approved payment of 50,000 with its computed fee and total.
+Running this script (`python testpayment.py`) prints a dictionary describing an approved payment of 50,000 with its computed fee (`50000 * 0.022 = 1100`) and total (`51100`).
 
 ## 11. Architecture Diagram
 
@@ -164,42 +164,42 @@ flowchart TD
 
 ### 12.1 What Changed
 
-- Added `test.txt` containing two lines of sample text (`test`, `check 1 -1`) — appears unrelated to application functionality.
-- Added `testpayment.py`, introducing:
-  - `PaymentValidator` class with a static `validate(amount)` method that raises `ValueError` for non-positive amounts.
-  - `PaymentProcessor` class with a `process(amount)` method that:
-    - Validates the amount.
-    - Calculates a processing fee as `amount * 0.022` (2.2%), explicitly marked in code as "New functionality: calculate processing fee."
-    - Calculates `total_amount` (`amount + fee`).
-    - Returns `"pending"` status requiring manager approval for amounts greater than 1,000,000.
-    - Returns `"approved"` status otherwise.
-  - Script-level execution that processes a sample amount (`50000`) and prints the result.
+- `test.txt` — unchanged from prior state; still contains two lines of sample text (`test`, `check 1 -1`), unrelated to application functionality.
+- `testpayment.py` — the processing fee calculation was changed: the fee rate used in `fee = amount * 0.022` is now `0.022` (2.2%), replacing the previously documented rate of `0.0222` (2.22%). The diff's inline comment `# New functionality: calculate processing fee` refers to the fee calculation block, though fee calculation itself already existed in the prior documented behavior — only the rate value differs.
+- All other logic in `testpayment.py` is unchanged:
+  - `PaymentValidator.validate(amount)` still raises `ValueError` for non-positive amounts.
+  - `PaymentProcessor.process(amount)` still computes `total_amount = amount + fee`.
+  - The approval threshold (`amount > 1000000` → `"pending"` with `"Manager approval required"`) is unchanged.
+  - Amounts at or below the threshold still return `"approved"` status.
+  - Script-level execution still processes a sample amount (`50000`) and prints the result.
 
 ### 12.2 Why It Changed
 
-Not evidenced in supplied context. (The PR title "Get check name" and empty description do not explain the motivation for adding `test.txt` or `testpayment.py`.)
+Not evidenced in supplied context. (The PR title "Get check name" and empty description do not explain the motivation for the fee rate change from `0.0222` to `0.022`, or for the inclusion of `test.txt`.)
 
 ### 12.3 Impacted Modules
 
-- `test.txt` (new file) — no functional impact; content unrelated to code.
-- `testpayment.py` (new file) — introduces new `PaymentValidator` and `PaymentProcessor` classes and standalone execution logic; this is a net-new module with no prior version to compare against.
+- `test.txt` (added/unchanged content) — no functional impact; content unrelated to code.
+- `testpayment.py` (modified fee rate) — affects `PaymentProcessor.process`, specifically the `fee` and `total_amount` calculations for every invocation.
 
 ### 12.4 API / Interface Changes
 
-None evidenced. No HTTP APIs or previously existing interfaces are modified. `testpayment.py` introduces new in-process classes/methods (`PaymentValidator.validate`, `PaymentProcessor.process`), but these are new additions, not changes to existing public APIs.
+None evidenced. No HTTP APIs or previously existing external interfaces are modified. The method signatures `PaymentValidator.validate(amount)` and `PaymentProcessor.process(amount)` remain unchanged; only the internal fee-rate constant used within `process` was altered.
 
 ### 12.5 Configuration Changes
 
-None evidenced.
+None evidenced. The fee rate remains a hard-coded literal (now `0.022` instead of `0.0222`) within `PaymentProcessor.process`, not externalized as configuration.
 
 ### 12.6 Expected Behavior
 
-- **Observed from code**: Running `testpayment.py` will validate that `amount > 0`, compute `fee = amount * 0.022` and `total_amount = amount + fee`, and return/print a dictionary with status `"approved"` for amounts ≤ 1,000,000, or `"pending"` (with a manager-approval message) for amounts > 1,000,000. Invalid amounts (`<= 0`) raise an uncaught `ValueError`.
-- **Inferred**: This module may be intended as a prototype or test utility for payment processing logic, possibly to be integrated into a larger system later. This is not confirmed by the supplied context.
+- **Observed from code**: Running `testpayment.py` will validate that `amount > 0`, compute `fee = amount * 0.022` and `total_amount = amount + fee`, and return/print a dictionary with status `"approved"` for amounts ≤ 1,000,000, or `"pending"` (with a manager-approval message) for amounts > 1,000,000. Invalid amounts (`<= 0`) raise an uncaught `ValueError`. For the sample invocation `process(50000)`, the fee is now `1100.0` (previously `1110.0` under the `0.0222` rate), and `total_amount` is now `51100.0` (previously `51110.0`).
+- **Inferred**: This module may be intended as a prototype or test utility for payment processing logic, possibly to be integrated into a larger system later. The fee-rate adjustment could reflect a correction or a business decision to lower the processing fee percentage; this is not confirmed by the supplied context.
 
 ### 12.7 Backward Compatibility
 
-Both files are newly added; there are no prior versions to break. No existing callers, configurations, or data formats are affected. Compatibility is not a concern for this change based on supplied evidence.
+- `testpayment.py` is a modification to a script introduced in a prior state (previously documented with fee rate `0.0222`). The change from `0.0222` to `0.022` alters the numeric output of `PaymentProcessor.process` for all amounts — this is a **breaking change** for any caller or test that asserts exact fee/total values calculated under the old rate.
+- `test.txt` has no functional impact and does not affect compatibility.
+- No configuration, data formats, or external callers beyond the script's own top-level execution are evidenced as affected.
 
 ### 12.8 Testing Requirements
 
@@ -208,17 +208,19 @@ Based on the evidenced logic in `testpayment.py`, the following tests are recomm
 - **Validation behavior**:
   - Verify `PaymentValidator.validate(amount)` raises `ValueError` for `amount == 0` and negative amounts.
   - Verify `PaymentValidator.validate(amount)` does not raise for positive amounts.
-- **Fee and total calculation**:
-  - Verify `fee` is correctly computed as `amount * 0.022` for representative amounts.
-  - Verify `total_amount` equals `amount + fee`.
+- **Fee and total calculation (updated rate)**:
+  - Verify `fee` is correctly computed as `amount * 0.022` (not `0.0222`) for representative amounts.
+  - Verify `total_amount` equals `amount + fee` under the new rate.
+  - Update or add regression tests to reflect the new expected fee/total values (e.g., for `amount = 50000`, expect `fee = 1100.0` and `total_amount = 51100.0`).
 - **Threshold/status logic**:
   - Verify amounts ≤ 1,000,000 return `status: "approved"`.
   - Verify amounts > 1,000,000 return `status: "pending"` with message `"Manager approval required"`.
   - Test boundary condition at exactly `amount == 1000000` (should be `"approved"` per `>` comparison) and `amount == 1000001` (should be `"pending"`).
 - **Error propagation**:
   - Verify `PaymentProcessor.process` propagates `ValueError` when given invalid input (e.g., `0`, negative numbers).
+- **Regression check on fee-rate change**:
+  - Explicitly test that the fee rate used is `0.022` and not the previously documented `0.0222`, to catch accidental reversions.
 - **Edge cases**:
   - Non-numeric input (e.g., strings) — behavior is currently undefined/untested in the supplied code; consider adding type-checking tests or explicit handling.
   - Very large amounts (beyond typical use) to ensure fee/total calculations do not overflow or behave unexpectedly.
 - **Regression risk**: Since `test.txt` has no functional code, no regression tests are needed for it; confirm it is not mistakenly referenced by any build/test tooling.
-- **Fee rate regression check**: Since the fee multiplier value (`0.022`) differs from a previously documented rate (`0.0222`), add a test asserting the exact fee rate used in `PaymentProcessor.process` to detect unintended future changes to this business rule.
