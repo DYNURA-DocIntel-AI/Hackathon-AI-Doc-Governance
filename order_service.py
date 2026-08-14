@@ -11,7 +11,7 @@ class Order:
 
 class OrderService:
 
-    AUTO_APPROVAL_LIMIT = 50_000
+    AUTO_APPROVAL_LIMIT = 25_000
 
     def create_order(self, order: Order):
         print(f"\nCreating order {order.order_id}")
