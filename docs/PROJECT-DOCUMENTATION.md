@@ -2,171 +2,45 @@
 
 ## 1. Drift Analysis
 
-This repository, in its current supplied state, contains the following files relevant to application logic:
+⚠️ **MAJOR DOCUMENTATION DRIFT DETECTED**
 
-- `test.txt` — a plain text file with sample content, unrelated to application logic.
-- `payment.py` — a small Python script implementing payment validation and processing logic, including payment-method-aware fee calculation, an approval threshold check, and payment-method validation via an `Enum`. (Note: earlier documentation referred to this script as `testpayment.py`; the currently supplied change set modifies a file named `payment.py` with the same `PaymentValidator`/`PaymentProcessor` structure. This appears to be the same module evolved/renamed; the rename itself is not explicitly evidenced in the supplied diff, so it is noted here as inferred.)
+The PR under analysis modifies a file named `testpayment.py`, which introduces a significant divergence from the previously documented and previously supplied `payment.py` implementation. The existing documentation (including the prior Drift Analysis) describes a `PaymentProcessor` with a `PaymentMethod`-aware `process(self, amount, payment_method)` signature, fee-rate lookup via `FEE_RATES`, and an approval threshold of `1000000`. The newly supplied diff shows a *different, simpler* method signature: `process(self)` with no `amount` or `payment_method` parameters, and a hardcoded `amount = 200` inside the method body, alongside a plain module-level `validate(amount)` function rather than the `PaymentValidator.validate(amount, payment_method)` static method previously documented.
 
-There is no evidence of a web framework, server, database, or API layer in the supplied code. The repository appears to be at an early/prototype stage, with `payment.py` demonstrating payment-processing business logic that now supports multiple payment methods with differentiated fee rates.
+This indicates either:
+1. The repository contains a second/older variant of the payment script (`testpayment.py`) that has diverged from `payment.py` and does not include the `PaymentMethod` enum or fee-rate table, or
+2. `testpayment.py` and `payment.py` are being tracked as the same conceptual module across PRs, but the supplied diff context for this PR only shows a fragment inconsistent with the fuller `payment.py` implementation described in prior documentation.
 
-The supplied code consists of two standalone Python scripts with no external framework integration, no persistence layer, and no networking code.
+Because the diff evidence explicitly shows `process(self, amount):` → `process(self):` with `amount = 200` added, and does **not** show a `payment_method` parameter, `PaymentMethod` enum usage, or `FEE_RATES` in the changed hunk, this PR's actual code context does not match the payment-method-aware business logic documented in Section 5. This is reported as MAJOR drift because the function signature and input-handling contract have materially changed and could mislead integrators about how `process` is invoked.
 
-The supplied code consists of a single standalone Python script with no external framework integration, no persistence layer, and no networking code. The architecture is a simple procedural/object-oriented script composed of:
+### Drift Item: `process` method signature and parameter removal
 
-- `PaymentMethod` — an `Enum` defining the supported payment methods (`UPI`, `CARD`, `BANK_TRANSFER`).
-- `PaymentValidator` — static validation utility, now validating both the amount and the payment method.
-- `PaymentProcessor` — orchestrates validation, computes a payment-method-specific fee via `calculate_fee`, computes the total amount, and returns a result dictionary including status, message, and payment method.
+* **Severity:** MAJOR
+* **Area:** Function / Business Logic
+* **Affected File:** `testpayment.py`
+* **Affected Function/Class:** `PaymentProcessor.process`
+* **Previous Documentation:** `PaymentProcessor.process(self, amount, payment_method)` accepts a caller-supplied `amount` and `payment_method`, validates both via `PaymentValidator.validate(amount, payment_method)`, computes a payment-method-specific fee via `calculate_fee`, and returns a result dict including `payment_method`.
+* **Current Code Behavior:** `PaymentProcessor.process(self)` takes **no parameters**. The `amount` is hardcoded internally to `200` and passed to a module-level `validate(amount)` function (not `PaymentValidator.validate(amount, payment_method)`). No `payment_method` argument is referenced in the diff.
+* **Evidence:** Diff hunk: `-    def process(self, amount):\n+    def process(self):\n+        amount = 200\n         PaymentValidator.validate(amount)`.
+* **Documentation Action:** Updated Section 5 (Business Logic) and Section 6 (Components) to document the `testpayment.py` variant separately from `payment.py`, noting the hardcoded amount and the removal of the `amount` parameter from `process`. Flagged that `payment_method`-aware logic is not evidenced in this diff/file.
 
-The script executes top-level code that instantiates `PaymentProcessor` and calls `process()` directly when run, passing an amount and a `PaymentMethod` value, and printing the result to stdout.
+### Drift Item: Hardcoded payment amount removes caller control
 
-**Order module (`order_service.py`)** — a separate, independent standalone script composed of:
+* **Severity:** MAJOR
+* **Area:** Business Logic
+* **Affected File:** `testpayment.py`
+* **Affected Function/Class:** `PaymentProcessor.process`
+* **Previous Documentation:** The amount to be processed was supplied by the caller as an argument to `process`, enabling variable payment amounts (e.g., the previously documented sample invocation `processor.process(30000, PaymentMethod.UPI)`).
+* **Current Code Behavior:** `amount` is now hardcoded to `200` inside `process`, meaning every invocation processes the same fixed amount regardless of caller intent; the caller can no longer control the amount via arguments to `process`.
+* **Evidence:** Diff: `+        amount = 200` added immediately after the `def process(self):` signature change.
+* **Documentation Action:** Updated Business Logic and Data Flow sections for `testpayment.py` to state the amount is fixed at `200` and is no longer a caller-supplied input.
 
-No HTTP APIs, endpoints, or web routes are evidenced in the supplied code. `payment.py` exposes only in-process Python classes/methods (not network-accessible):
+### Drift Item: File/module identity ambiguity (`testpayment.py` vs `payment.py`)
 
-- `PaymentValidator.validate(amount, payment_method)` — static method, not an HTTP API.
-- `PaymentProcessor.calculate_fee(amount, payment_method)` — instance method, not an HTTP API.
-- `PaymentProcessor.process(amount, payment_method)` — instance method, not an HTTP API.
-
-## 5. Business Logic
-
-### 5.1 Payment Processing (`testpayment.py`)
-
-The core business logic is implemented in `payment.py`:
-
-- **Payment methods**: Supported payment methods are defined by the `PaymentMethod` enum: `UPI`, `CARD`, and `BANK_TRANSFER`.
-- **Validation rule (amount)**: A payment `amount` must be strictly greater than zero. If `amount <= 0`, a `ValueError` is raised with the message `"Amount must be greater than zero"`.
-- **Validation rule (payment method)**: The `payment_method` argument must be an instance of the `PaymentMethod` enum. If it is not, a `ValueError` is raised with the message `"Invalid payment method"`.
-- **Fee calculation (payment-method-specific)**: The processing fee is computed based on the payment method via `PaymentProcessor.FEE_RATES`:
-  - `UPI`: `1%` (`0.01`)
-  - `CARD`: `2%` (`0.02`)
-  - `BANK_TRANSFER`: `0.5%` (`0.005`)
-
-  The fee is computed as `round(amount * rate, 2)`, where `rate` is looked up from `FEE_RATES` using the given `payment_method`.
-- **Total amount**: `total_amount = amount + fee`.
-- **Approval threshold rule**: If `amount > 1000000`, the payment is not immediately approved — the result status is `"pending"` with the message `"Manager approval required"`. (The threshold value itself remains `1,000,000`; only its literal representation in code changed from `1_000_000` to `1000000`, a formatting change with no effect on behavior.)
-- **Default approval**: If the amount is within the valid range and does not exceed the threshold, the result status is `"approved"` with the message `"Payment processed successfully"`.
-- **Result payload**: Regardless of status, the result now includes the resolved `payment_method` (as its string `.value`), in addition to `status`, `message`, `amount`, `fee`, and `total_amount`.
-
-#### Processing Flow
-
-1. `PaymentProcessor.process(amount, payment_method)` is called with a numeric amount and a `PaymentMethod` enum member.
-2. `PaymentValidator.validate(amount, payment_method)` checks:
-   - `amount > 0`; raises `ValueError("Amount must be greater than zero")` otherwise.
-   - `payment_method` is a `PaymentMethod` instance; raises `ValueError("Invalid payment method")` otherwise.
-3. `PaymentProcessor.calculate_fee(amount, payment_method)` looks up the fee rate for the given payment method from `FEE_RATES` and computes `fee = round(amount * rate, 2)`.
-4. `total_amount = amount + fee` is computed.
-5. If `amount > 1000000`, `status = "pending"` and `message = "Manager approval required"`.
-6. Otherwise, `status = "approved"` and `message = "Payment processed successfully"`.
-7. A result dictionary is returned containing `status`, `message`, `payment_method` (string value), `amount`, `fee`, and `total_amount`.
-
-## 5. Components
-
-### `PaymentMethod`
-- **Type**: `Enum`.
-- **Members**: `UPI = "UPI"`, `CARD = "CARD"`, `BANK_TRANSFER = "BANK_TRANSFER"`.
-- **Purpose**: Restricts the set of valid payment methods accepted by `PaymentValidator` and `PaymentProcessor`.
-
-### `PaymentValidator`
-- **Type**: Class with a single static method.
-- **Method**: `validate(amount, payment_method)` — raises `ValueError` if `amount <= 0` (`"Amount must be greater than zero"`), and raises `ValueError` if `payment_method` is not an instance of `PaymentMethod` (`"Invalid payment method"`). Otherwise performs no action (implicitly valid).
-
-### `PaymentProcessor`
-- **Type**: Class encapsulating payment processing.
-- **Class attribute**: `FEE_RATES` — a dict mapping each `PaymentMethod` to its fee rate (`UPI`: `0.01`, `CARD`: `0.02`, `BANK_TRANSFER`: `0.005`).
-- **Method**: `calculate_fee(self, amount, payment_method)` — looks up the rate for `payment_method` in `FEE_RATES` and returns `round(amount * rate, 2)`.
-- **Method**: `process(self, amount, payment_method)`:
-  - Validates the amount and payment method via `PaymentValidator.validate`.
-  - Calculates `fee` via `calculate_fee` and computes `total_amount`.
-  - Determines `status` and `message` based on the approval threshold (`amount > 1000000`).
-  - Returns a dictionary describing the outcome (`status`, `message`, `payment_method` (string value), `amount`, `fee`, `total_amount`).
-
-### Script-level execution
-- Instantiates `processor = PaymentProcessor()`.
-- Calls `processor.process(30000, PaymentMethod.UPI)`. (Previously `60000`; the example invocation amount was changed but the underlying processing logic and outcome — `"approved"` status, since the amount remains well below the 1,000,000 threshold — are unaffected.)
-- Prints the resulting dictionary to standard output.
-
-### `test.txt`
-- A non-code text file containing two lines: `test` and `check 1 -1`. No functional role evidenced; appears to be a test/placeholder artifact.
-
-## 6. Data Flow
-
-```
-amount, payment_method (input)
-   │
-   ▼
-PaymentValidator.validate(amount, payment_method)
-   ├── amount <= 0            ──▶ raises ValueError("Amount must be greater than zero")
-   └── not a PaymentMethod    ──▶ raises ValueError("Invalid payment method")
-   ▼
-PaymentProcessor.calculate_fee(amount, payment_method)
-   │   rate = FEE_RATES[payment_method]   (UPI=0.01, CARD=0.02, BANK_TRANSFER=0.005)
-   │   fee = round(amount * rate, 2)
-   ▼
-total_amount = amount + fee
-   │
-   ▼
-amount > 1000000 ?
-   ├── Yes ──▶ {status: "pending",  message: "Manager approval required",       payment_method, amount, fee, total_amount}
-   └── No  ──▶ {status: "approved", message: "Payment processed successfully",  payment_method, amount, fee, total_amount}
-```
-
-Data flows entirely in-memory within a single process execution; there is no external I/O, persistence, or network transmission evidenced.
-
-## 7. Configuration
-
-No configuration files, environment variables, or settings are evidenced in the supplied code.
-
-- The per-method fee rates (`UPI`: `0.01`, `CARD`: `0.02`, `BANK_TRANSFER`: `0.005`) are hard-coded as a class-level dictionary (`PaymentProcessor.FEE_RATES`), not externalized as configuration.
-- The approval threshold (`1000000`) is a hard-coded literal within `PaymentProcessor.process`, not externalized as configuration. Its numeric value is unchanged; only its literal formatting (previously written with an underscore digit separator, `1_000_000`) was updated.
-
-## 8. Error Handling
-
-- `PaymentValidator.validate(amount, payment_method)` raises a `ValueError` with message `"Amount must be greater than zero"` when `amount <= 0`.
-- `PaymentValidator.validate(amount, payment_method)` raises a `ValueError` with message `"Invalid payment method"` when `payment_method` is not an instance of the `PaymentMethod` enum.
-- Both exceptions propagate uncaught from `PaymentProcessor.process`, meaning callers must handle them themselves (no try/except is present in the supplied script).
-- `PaymentProcessor.calculate_fee` will raise a `KeyError` if called with a `payment_method` not present in `FEE_RATES`; however, since `validate` is called before `calculate_fee` in `process` and rejects non-`PaymentMethod` values, this scenario is not reachable through the normal `process` flow given the currently defined enum members.
-- No other error handling (e.g., type validation for non-numeric amounts) is present in the supplied code.
-
-## 9. Dependencies
-
-`payment.py` imports `Enum` from the Python standard library (`enum` module) to define `PaymentMethod`. No third-party libraries, frameworks, or external services are evidenced in the supplied code.
-
-## 12. Change Summary
-
-### What Changed
-
-- In `PaymentProcessor.process`, the approval threshold check was rewritten from `if amount > 1_000_000:` to `if amount > 1000000:`. This is a literal formatting change (removal of the underscore digit separator); the numeric threshold value (1,000,000) is unchanged.
-- In the script-level example invocation, `processor.process(60000, PaymentMethod.UPI)` was changed to `processor.process(30000, PaymentMethod.UPI)`, altering the sample amount used when the script is run directly.
-
-### Why It Changed
-
-Not evidenced in supplied context. The PR title is "Pyament Process Update" with no description provided.
-
-### Impacted Modules
-
-- `payment.py` — specifically `PaymentProcessor.process` (threshold literal) and the module's top-level script execution block (example invocation amount).
-
-### API / Interface Changes
-
-None evidenced. Method signatures for `PaymentValidator.validate`, `PaymentProcessor.calculate_fee`, and `PaymentProcessor.process` are unchanged.
-
-### Configuration Changes
-
-None evidenced. The approval threshold remains a hard-coded literal (value unchanged at 1,000,000); only its source-code representation changed.
-
-### Expected Behavior
-
-- **Observed from code**: The approval threshold comparison behaves identically before and after the change, since `1_000_000 == 1000000` in Python — no functional difference in when a payment is marked `"pending"` vs. `"approved"`.
-- **Observed from code**: Running the script directly now processes a payment of `30000` via `UPI` instead of `60000`. Given the fee rate for `UPI` is `1%`, this changes the printed sample output's `amount`, `fee` (from `600.0` to `300.0`), and `total_amount` (from `60600.0` to `30300.0`), but the `status` remains `"approved"` in both cases since neither amount exceeds the 1,000,000 threshold.
-- **Inferred**: This change appears to be a minor code cleanup/example-data adjustment rather than a business rule change.
-
-### Backward Compatibility
-
-No breaking changes are evidenced. The public method signatures, validation rules, fee calculation logic, and approval threshold value are all unchanged. The only differences are a code-style literal change and a sample invocation value, neither of which affects the module's external behavior or contract.
-
-### Testing Requirements
-
-- Verify `PaymentProcessor.process` still returns `status = "approved"` for amounts at and below 1,000,000, and `status = "pending"` for amounts above 1,000,000, confirming the threshold behavior is unaffected by the literal formatting change.
-- Verify boundary behavior at `amount == 1000000` (should be `"approved"`, since the condition is strictly `>`).
-- Re-run/verify the script's sample output reflects the new example amount (`30000`) with correct `fee` (`300.0`) and `total_amount` (`30300.0`) for `PaymentMethod.UPI`.
-- Confirm no regression in existing validation error paths (`amount <= 0`, invalid `payment_method`).
+* **Severity:** MODERATE
+* **Area:** Architecture / Other
+* **Affected File:** `testpayment.py`
+* **Affected Function/Class:** `PaymentProcessor`
+* **Previous Documentation:** Earlier documentation stated `testpayment.py` and `payment.py` were "the same module evolved/renamed," implying a single canonical payment-processing module with `PaymentMethod`-aware logic.
+* **Current Code Behavior:** The diff for this PR is against `testpayment.py` and shows a `process` method without `payment_method` handling, calling a plain `validate(amount)` function rather than `PaymentValidator.validate(amount, payment_method)`. This is inconsistent with treating the two files as identical in structure.
+* **Evidence:** PR changed file list: `testpayment.py (modified, +2/-1)`; diff shows `PaymentValidator.validate(amount)` (single-argument call) rather than the two-argument call documented for `payment.py`.
+* **Documentation Action:** Documentation now treats `testpayment.py` as a related but distinct/sim
