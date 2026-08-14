@@ -49,7 +49,7 @@ class OrderService:
             discount_rate = 0
 
         elif order.amount <= 50_000:
-            discount_rate = 0.06
+            discount_rate = 0.07
 
         else:
             discount_rate = 0.10
