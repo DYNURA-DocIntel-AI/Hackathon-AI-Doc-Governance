@@ -121,7 +121,12 @@ def main():
                 order_id="ORD-004",
                 customer_name="Amit2",
                 amount=15_000,
-            )
+            ),
+        Order(
+                        order_id="ORD-004",
+                        customer_name="Amit3",
+                        amount=15_000,
+                    )
     ]
 
     for order in orders:
