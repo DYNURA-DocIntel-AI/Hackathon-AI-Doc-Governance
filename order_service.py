@@ -115,7 +115,7 @@ def main():
         Order(
             order_id="ORD-003",
             customer_name="Amit",
-            amount=1500_000,
+            amount=15000_000,
         ),
     ]
 
