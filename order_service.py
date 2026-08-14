@@ -115,7 +115,7 @@ def main():
         Order(
             order_id="ORD-003",
             customer_name="Amit",
-            amount=150_000,
+            amount=15_000,
         ),
     ]
 
@@ -128,7 +128,7 @@ def main():
         print(discount)
         shipping = service.calculate_shipping_fee(order)
         priority = service.is_priority_order(order)
-        
+
         print({
             "order_id": order.order_id,
             "shipping_fee": shipping,
