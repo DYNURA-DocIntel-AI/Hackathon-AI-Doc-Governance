@@ -1,6 +1,6 @@
 # Project Documentation
 
-## 1. Overview
+## 1. Drift Analysis
 
 This repository, in its current supplied state, contains the following files relevant to application logic:
 
@@ -9,7 +9,7 @@ This repository, in its current supplied state, contains the following files rel
 
 There is no evidence of a web framework, server, database, or API layer in the supplied code. The repository appears to be at an early/prototype stage, with `payment.py` demonstrating payment-processing business logic that now supports multiple payment methods with differentiated fee rates.
 
-## 2. Architecture
+The supplied code consists of two standalone Python scripts with no external framework integration, no persistence layer, and no networking code.
 
 The supplied code consists of a single standalone Python script with no external framework integration, no persistence layer, and no networking code. The architecture is a simple procedural/object-oriented script composed of:
 
@@ -19,7 +19,7 @@ The supplied code consists of a single standalone Python script with no external
 
 The script executes top-level code that instantiates `PaymentProcessor` and calls `process()` directly when run, passing an amount and a `PaymentMethod` value, and printing the result to stdout.
 
-## 3. APIs
+**Order module (`order_service.py`)** — a separate, independent standalone script composed of:
 
 No HTTP APIs, endpoints, or web routes are evidenced in the supplied code. `payment.py` exposes only in-process Python classes/methods (not network-accessible):
 
@@ -27,9 +27,9 @@ No HTTP APIs, endpoints, or web routes are evidenced in the supplied code. `paym
 - `PaymentProcessor.calculate_fee(amount, payment_method)` — instance method, not an HTTP API.
 - `PaymentProcessor.process(amount, payment_method)` — instance method, not an HTTP API.
 
-No API documentation applies.
+## 5. Business Logic
 
-## 4. Business Logic
+### 5.1 Payment Processing (`testpayment.py`)
 
 The core business logic is implemented in `payment.py`:
 
@@ -47,7 +47,7 @@ The core business logic is implemented in `payment.py`:
 - **Default approval**: If the amount is within the valid range and does not exceed the threshold, the result status is `"approved"` with the message `"Payment processed successfully"`.
 - **Result payload**: Regardless of status, the result now includes the resolved `payment_method` (as its string `.value`), in addition to `status`, `message`, `amount`, `fee`, and `total_amount`.
 
-### Processing Flow
+#### Processing Flow
 
 1. `PaymentProcessor.process(amount, payment_method)` is called with a numeric amount and a `PaymentMethod` enum member.
 2. `PaymentValidator.validate(amount, payment_method)` checks:
