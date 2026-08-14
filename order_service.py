@@ -35,6 +35,36 @@ class OrderService:
             "message": message,
         }
 
+    def calculate_discount(self, order: Order):
+        """
+        Calculate discount based on order amount.
+
+        Business Rules:
+        - Orders below ₹10,000 receive no discount.
+        - Orders from ₹10,000 to ₹50,000 receive 5%.
+        - Orders above ₹50,000 receive 10%.
+        """
+
+        if order.amount < 10_000:
+            discount_rate = 0
+
+        elif order.amount <= 50_000:
+            discount_rate = 0.05
+
+        else:
+            discount_rate = 0.10
+
+        discount_amount = order.amount * discount_rate
+        final_amount = order.amount - discount_amount
+
+        return {
+            "order_id": order.order_id,
+            "original_amount": order.amount,
+            "discount_rate": discount_rate,
+            "discount_amount": discount_amount,
+            "final_amount": final_amount,
+        }
+
 
 def main():
     service = OrderService()
@@ -53,8 +83,12 @@ def main():
     ]
 
     for order in orders:
+
         result = service.create_order(order)
         print(result)
+
+        discount = service.calculate_discount(order)
+        print(discount)
 
 
 if __name__ == "__main__":
