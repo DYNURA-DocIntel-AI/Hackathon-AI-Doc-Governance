@@ -81,7 +81,16 @@ class OrderService:
             "discount_amount": discount_amount,
             "final_amount": final_amount,
         }
+    def calculate_shipping_fee(self, order: Order):
+    # Old docs: free shipping above ₹25,000
+    # Current rule: free shipping above ₹50,000
+        return 0 if order.amount >= 50_000 else 500
 
+
+    def is_priority_order(self, order: Order):
+    # Old docs: priority above ₹100,000
+    # Current rule: priority above ₹75,000
+        return order.amount > 75_000
 
 def main():
 
@@ -117,7 +126,14 @@ def main():
 
         discount = service.calculate_discount(order)
         print(discount)
-
+        shipping = service.calculate_shipping_fee(order)
+        priority = service.is_priority_order(order)
+        
+        print({
+            "order_id": order.order_id,
+            "shipping_fee": shipping,
+            "priority": priority,
+        })
 
 if __name__ == "__main__":
     main()
